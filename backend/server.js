@@ -77,7 +77,12 @@ requireProductionEnv('SCANNER_IMPORT_DIR');
 requireProductionEnv('STAFF_DEFAULT_PERMISSIONS');
 requireProductionEnv('TRUST_PROXY');
 
-const dbPath = path.resolve(__dirname, process.env.SQLITE_DB_PATH || './data/drosa.sqlite');
+// Vercel functions have a read-only deployment filesystem.  For the demo
+// profile the database therefore lives in the only writable location, /tmp.
+// A persistent deployment must set SQLITE_DB_PATH explicitly (for example on
+// a Railway volume) or use the forthcoming Turso provider.
+const defaultSqlitePath = process.env.VERCEL ? '/tmp/drosa.sqlite' : './data/drosa.sqlite';
+const dbPath = path.resolve(__dirname, process.env.SQLITE_DB_PATH || defaultSqlitePath);
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const schema = fs.readFileSync(path.join(__dirname, 'database.sql'), 'utf8');
@@ -86,6 +91,7 @@ let db = openDatabase();
 let server;
 let automaticBackupTimer;
 let restoreInProgress = false;
+let initializationPromise;
 
 function openDatabase() {
   const database = new DatabaseSync(dbPath);
@@ -5864,8 +5870,7 @@ async function runAutomaticBackupIfNeeded() {
 
 async function startServer() {
   try {
-    applyMigrations();
-    await seedDatabase();
+    await initializeApp();
 
     server = app.listen(PORT, () => {
       console.log(`Dr Rosa Backend API running on http://localhost:${PORT}`);
@@ -5884,6 +5889,16 @@ async function startServer() {
     }
     process.exit(1);
   }
+}
+
+function initializeApp() {
+  if (!initializationPromise) {
+    initializationPromise = Promise.resolve().then(async () => {
+      applyMigrations();
+      await seedDatabase();
+    });
+  }
+  return initializationPromise;
 }
 
 function shutdown() {
@@ -5913,9 +5928,10 @@ function shutdown() {
   });
 }
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+if (require.main === module) {
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  startServer();
+}
 
-startServer();
-
-module.exports = { app, get server() { return server; }, db, dbPath, startServer };
+module.exports = { app, get server() { return server; }, db, dbPath, initializeApp, startServer };
