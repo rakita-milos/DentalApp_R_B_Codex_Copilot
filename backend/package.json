@@ -11,9 +11,12 @@
     "dev": "nodemon server.js",
     "test": "node --test test/*.test.js",
     "backup": "node scripts/backup-sqlite.js",
-    "seed:demo": "node scripts/seed-demo-data.js"
+    "seed:demo": "node scripts/seed-demo-data.js",
+    "migrate:turso": "node scripts/migrate-turso.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1086.0",
+    "@libsql/client": "^0.17.4",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
